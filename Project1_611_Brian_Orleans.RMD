@@ -1,0 +1,81 @@
+---
+title: "Project 1: Patterns of Missingness in NYC Airquality Data"
+date: "`r format(Sys.time(), '%m/%d/%Y')`"
+output: html_document
+---
+####By Brian Orleans
+####UNC BIOS 611
+
+```{r Setup, echo=F, warning=F, message=F, results = "hide"}
+##setup
+setwd("C:/Users/borleans/Documents/BIOS 611/Projects/Project 1") #Change to local directory
+
+data(airquality)
+#install.packages("tidyverse") #install if missing package
+#install.packages("ggstance") #install if missing package
+library(tidyverse)
+library(ggstance)
+```
+
+
+```{r Data analysis, echo=F, warning=F, message=F, results = "hide"}
+# lets take a quick look at data
+str(airquality)
+head(airquality)
+
+#what months does this data represent
+airquality %>% 
+  group_by(Month,Day) %>% 
+  mutate(n = n()) #Let's see what months this data represents -- I am only interested in travel for Summer Semester.
+
+#summarize Temp and explore missingness of Ozone
+airquality2 <-  
+  airquality %>% 
+  filter(Month != 9) %>%  #Remove September -- can't travel that month
+  mutate(Temp.bin = factor((Temp >= 50)+(Temp >=75)+(Temp>=85), 
+            labels = c("Less Than 75 (56-74)", "75-84", "85+ (85-97)")),#bin Temp
+         Ozone.na = factor(as.integer(is.na(Ozone), 
+          labels = c("Missing", "Non-missing")))) #Integer binary for missing Ozone
+
+
+(Wind.meds <- airquality2 %>% 
+  group_by(Temp.bin, Ozone.na) %>% #create stratum
+  summarise(Wind.med = median(Wind)))  #calculate stratum-specific median
+#median wind for missing and high temp
+high.miss.med <- Wind.meds %>% filter(Temp.bin == "85+ (85-97)" & Ozone.na == 1) %>% pull(Wind.med) 
+#median wind for no missing and high temp
+high.nomiss.med <- Wind.meds %>% filter(Temp.bin == "85+ (85-97)" & Ozone.na == 0) %>% pull(Wind.med) 
+
+
+head(airquality2)
+(missing <- airquality2 %>% 
+  group_by(Ozone.na) %>% 
+  summarize(n = n())) #noticeable amounts of missing data
+
+n <- sum(missing[,2])
+(percent.missing = missing[2,2]/n) #29%
+
+```
+##Blog Post
+
+In a hypothetical scenario, I am looking to travel to NYC, but I am sensitive to air pollution due to Asthma. Using a dataset containing information on air quality in NYC (n = `r nrow(airquality)`), I would like to predict what weather indicators will help me to know which days I are high in pollution, specifically Ozone particles measured in ppb. I know that I can only travel during summer months, during semesters, so I made sure only to use data from May through August (n = `r nrow(airquality2)`). In exploring these predictions, I noticed that there `r round(percent.missing, digits = 0)`% of values for ozone are missing. With such large rates of missingness, there could be a cause for concern. If those missing have different distributions of predictors compared to this with values of Ozone, this could violate assumption of Missing Completely at Random. As such, I visually explore wether missing is associated with predictors. 
+
+```{r Plot, echo=F,}
+airquality2 %>% 
+  ggplot +
+    geom_boxploth(aes(y = Temp.bin, x = Wind, fill = Ozone.na))  + 
+    scale_fill_manual(limits = c("1", "0"), values = c("1"="red","0"="blue"), 
+                      labels = c("1"="missing", "0"="Non-Missing"), name = "Ozone (ppb)") +
+    geom_text(aes(y = c(0.55,1.45,1.58,2.45,2.58,3.45), x = Wind.med, 
+                  label = Wind.med), data = Wind.meds) + #annotate medians
+    xlab("Wind Speed (mph)") + #x-axis label
+    ylab("Temperature (F)") + #y-axis label
+#    labs(fill = "Ozone (ppb)") + #legend Label
+    labs(title="Exploring Mechanisms of Missingness", subtitle="Relation of Wind and Temp with Missing Ozone") #Titles
+```
+
+The chart shows some, but not much, variation in values of wind, when stratified by levels of temperature. The most noteable difference is in the high temperature group (85+), where wind speeds are different (`r high.miss.med` for Missing vs. `r high.nomiss.med` for Non-missing), but overall mechanisms of missingness don't seem concering based on evidence from the chart. 
+
+Had there been differences in distributions, it would be worthwhile to see if there might be a way to explain missingness. Perhaps, there is an issue with the data collection mechanism, such as whether the instrument collecting Ozone measurements tended to fail in certain types of weather.  Otherwise, adjusting for missing data, such as inverse probability weighting might be needed. Hopefully, high Ozone didn't cause it to fail, otherwise that would have been a real issue -- this is the most worrisome sort of missingness. 
+
+Seeing as I didn't find any concerning missingness patterns, I plan to go ahead in predicting the weather patterns that are associated with low Ozone. I can't wait for NYC, with minimal asthma symptoms of course.
